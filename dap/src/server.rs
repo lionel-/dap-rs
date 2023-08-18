@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::sync::{Arc, Mutex};
 
 use serde_json;
 
@@ -26,6 +27,10 @@ enum ServerState {
 /// requests from it, as well as constructing and serializing outgoing messages.
 pub struct Server<R: Read, W: Write> {
   input_buffer: BufReader<R>,
+  pub output: Arc<Mutex<ServerOutput<W>>>,
+}
+
+pub struct ServerOutput<W: Write> {
   output_buffer: BufWriter<W>,
   sequence_number: i64,
 }
@@ -33,10 +38,14 @@ pub struct Server<R: Read, W: Write> {
 impl<R: Read, W: Write> Server<R, W> {
   /// Construct a new Server using the given input and output streams.
   pub fn new(input: BufReader<R>, output: BufWriter<W>) -> Self {
-    Self {
-      input_buffer: input,
+    let server_output = Arc::new(Mutex::new(ServerOutput {
       output_buffer: output,
       sequence_number: 0,
+    }));
+
+    Self {
+      input_buffer: input,
+      output: server_output,
     }
   }
 
@@ -100,6 +109,25 @@ impl<R: Read, W: Write> Server<R, W> {
     }
   }
 
+  pub fn send(&mut self, body: Sendable) -> Result<(), ServerError> {
+    let mut output = self.output.lock().unwrap();
+    output.send(body)
+  }
+
+  pub fn respond(&mut self, response: Response) -> Result<(), ServerError> {
+    self.send(Sendable::Response(response))
+  }
+
+  pub fn send_event(&mut self, event: Event) -> Result<(), ServerError> {
+    self.send(Sendable::Event(event))
+  }
+
+  pub fn send_reverse_request(&mut self, request: ReverseRequest) -> Result<(), ServerError> {
+    self.send(Sendable::ReverseRequest(request))
+  }
+}
+
+impl<W: Write> ServerOutput<W> {
   pub fn send(&mut self, body: Sendable) -> Result<(), ServerError> {
     self.sequence_number += 1;
 
