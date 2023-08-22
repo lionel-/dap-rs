@@ -390,6 +390,7 @@ pub struct ReadMemoryArguments {
 
 /// Arguments for a ReadMemory request.
 #[derive(Deserialize, Debug, Clone)]
+#[serde(untagged)]
 pub enum RestartArguments {
   AttachArguments(AttachRequestArguments),
   LaunchArguments(LaunchRequestArguments),
